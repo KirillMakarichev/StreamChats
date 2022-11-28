@@ -6,8 +6,7 @@ using StreamChats.Youtube;
 
 var clientSecrets = JObject.Parse(File.ReadAllText("app_secrets.json"));
 
-var wasds = (await Task.WhenAll(Enumerable.Range(0, 5)
-    .Select(x => WasdProvider.InitializeAsync(channelName: "xpamyjl9")))).ToList();
+var wasd = await WasdProvider.InitializeAsync(channelName: "xpamyjl9");
 
 var token = (string)clientSecrets["donationAlerts"]["token"];
 using var da = await DonationAlertsProvider.InitializeAsync(token);
@@ -18,10 +17,11 @@ using var youtube =
     await YoutubeProvider.InitializeFromJsonAsync(youtubeOptions);
 
 using var streamingProvider = new StreamingProvider(
-    new List<IStreamingPlatformProvider>(wasds)
+    new List<IStreamingPlatformProvider>()
     {
         da,
         youtube,
+        wasd
     });
 
 await streamingProvider.SubscribeForMessagesAsync(async @event =>

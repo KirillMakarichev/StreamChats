@@ -134,7 +134,7 @@ public class WasdProvider : IStreamingPlatformProvider
             }
         });
 
-        //_longPollHeartbeat.Start();
+        _longPollHeartbeat.Start();
         _longPollExponentialBackoff.Start();
     }
 
