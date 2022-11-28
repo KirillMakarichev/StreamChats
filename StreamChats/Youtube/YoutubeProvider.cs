@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using Google.Apis.Auth.OAuth2;
+using Google.Apis.Http;
 using Google.Apis.Services;
 using Google.Apis.Util;
 using Google.Apis.Util.Store;
@@ -17,7 +18,7 @@ public class YoutubeProvider : IStreamingPlatformProvider
     private readonly LiveBroadcastsResource _liveBroadcastsResource;
     private Thread _longPollThread;
 
-    private YoutubeProvider(UserCredential credential)
+    private YoutubeProvider(IConfigurableHttpClientInitializer credential)
     {
         _youTubeService = new YouTubeService(new BaseClientService.Initializer()
         {
@@ -32,27 +33,20 @@ public class YoutubeProvider : IStreamingPlatformProvider
     {
         await using var stream = new FileStream(fileCredentialsPath, FileMode.Open, FileAccess.Read);
 
-        var credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
-            GoogleClientSecrets.Load(stream).Secrets,
-            // This OAuth 2.0 access scope allows for full read/write access to the
-            // authenticated user's account.
-            new[] { YouTubeService.Scope.YoutubeReadonly },
-            "user",
-            CancellationToken.None,
-            new FileDataStore(typeof(YoutubeProvider).FullName)
-        );
-
-        return new YoutubeProvider(credential);
+        return await SetCredential(stream);
     }
     
     public static async Task<YoutubeProvider> InitializeFromJsonAsync(string credentialsJson)
     {
         await using var stream = new MemoryStream(Encoding.Default.GetBytes(credentialsJson));
 
+        return await SetCredential(stream);
+    }
+
+    private static async Task<YoutubeProvider> SetCredential(Stream stream)
+    {
         var credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
             GoogleClientSecrets.Load(stream).Secrets,
-            // This OAuth 2.0 access scope allows for full read/write access to the
-            // authenticated user's account.
             new[] { YouTubeService.Scope.YoutubeReadonly },
             "user",
             CancellationToken.None,
