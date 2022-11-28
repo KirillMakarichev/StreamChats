@@ -1,6 +1,8 @@
 ﻿# Created by https://www.toptal.com/developers/gitignore/api/rider,visualstudio,dotnetcore
 # Edit at https://www.toptal.com/developers/gitignore?templates=rider,visualstudio,dotnetcore
 
+StreamsTest/app_secrets.json
+
 ### DotnetCore ###
 # .NET Core build folders
 bin/
