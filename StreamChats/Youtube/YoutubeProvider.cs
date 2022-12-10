@@ -5,6 +5,7 @@ using Google.Apis.Services;
 using Google.Apis.Util;
 using Google.Apis.Util.Store;
 using Google.Apis.YouTube.v3;
+using Google.Apis.YouTube.v3.Data;
 using StreamChats.Shared;
 
 namespace StreamChats.Youtube;
@@ -13,57 +14,63 @@ public class YoutubeProvider : IStreamingPlatformProvider
 {
     public event Func<UpdateEvent, Task> OnUpdateAsync;
     public Platform Platform => Platform.Youtube;
-
-    private readonly YouTubeService _youTubeService;
-    private readonly LiveBroadcastsResource _liveBroadcastsResource;
     private Thread _longPollThread;
+    private LiveBroadcastListResponse _streamData;
+    private readonly YoutubeServices _youtubeServices;
 
-    private YoutubeProvider(IConfigurableHttpClientInitializer credential)
+    private string StreamId => _streamData.Items[0].Snippet.LiveChatId;
+    private string ChannelId => _streamData.Items[0].Snippet.ChannelId;
+
+    private YoutubeProvider(YoutubeServices youtubeServices)
     {
-        _youTubeService = new YouTubeService(new BaseClientService.Initializer()
-        {
-            HttpClientInitializer = credential,
-            ApplicationName = typeof(YoutubeProvider).FullName,
-        });
-
-        _liveBroadcastsResource = new LiveBroadcastsResource(_youTubeService);
+        _youtubeServices = youtubeServices;
     }
 
     public static async Task<YoutubeProvider> InitializeFromFileAsync(string fileCredentialsPath)
     {
         await using var stream = new FileStream(fileCredentialsPath, FileMode.Open, FileAccess.Read);
 
-        return await SetCredential(stream);
+        return await SetCredentialAsync(stream);
     }
-    
+
     public static async Task<YoutubeProvider> InitializeFromJsonAsync(string credentialsJson)
     {
         await using var stream = new MemoryStream(Encoding.Default.GetBytes(credentialsJson));
 
-        return await SetCredential(stream);
+        return await SetCredentialAsync(stream);
     }
 
-    private static async Task<YoutubeProvider> SetCredential(Stream stream)
+    private static async Task<YoutubeProvider> SetCredentialAsync(Stream stream)
     {
         var credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
             GoogleClientSecrets.Load(stream).Secrets,
-            new[] { YouTubeService.Scope.YoutubeReadonly },
+            new[] { YouTubeService.Scope.YoutubeReadonly, YouTubeService.Scope.YoutubeForceSsl },
             "user",
             CancellationToken.None,
             new FileDataStore(typeof(YoutubeProvider).FullName)
         );
 
-        return new YoutubeProvider(credential);
+        //await GoogleWebAuthorizationBroker.ReauthorizeAsync(credential, CancellationToken.None);
+
+        var youTubeService = new YouTubeService(new BaseClientService.Initializer()
+        {
+            HttpClientInitializer = credential,
+            ApplicationName = typeof(YoutubeProvider).FullName,
+        });
+
+        var services = new YoutubeServices(youTubeService);
+
+        return new YoutubeProvider(services);
     }
 
     public async Task SubscribeForMessagesAsync()
     {
-        var req = _liveBroadcastsResource.List(new Repeatable<string>(new[] { "snippet" }));
+        var req = _youtubeServices.LiveBroadcastsResource.List(new Repeatable<string>(new[] { "snippet" }));
         req.Mine = true;
 
-        var data = await req.ExecuteAsync();
+        _streamData = await req.ExecuteAsync();
 
-        var query = new LiveChatMessagesResource.ListRequest(_youTubeService, data.Items[0].Snippet.LiveChatId,
+        var query = _youtubeServices.LiveChatMessagesResource.List(StreamId,
             new Repeatable<string>(new[] { "snippet", "authorDetails" }));
 
         _longPollThread = new Thread(async () =>
@@ -74,17 +81,23 @@ public class YoutubeProvider : IStreamingPlatformProvider
                 query.PageToken = resp.NextPageToken;
 
                 if (resp.Items.Any())
-                { 
+                {
                     OnUpdateAsync?.Invoke(new UpdateEvent()
                     {
                         EventType = EventType.Message,
                         PlatformIdentity = Platform,
-                        Messages = resp.Items.Select(x => new Message()
+                        Messages = resp.Items.Select(x =>
                         {
-                            Text = x.Snippet.DisplayMessage,
-                            CreatedAt = DateTime.Parse(x.Snippet.PublishedAtRaw),
-                            UserId = x.Snippet.AuthorChannelId,
-                            UserName = x.AuthorDetails.DisplayName
+                            var snippetAuthorChannelId = x.Snippet.AuthorChannelId;
+
+                            return new Message()
+                            {
+                                Text = x.Snippet.DisplayMessage,
+                                CreatedAt = DateTime.Parse(x.Snippet.PublishedAtRaw),
+                                UserId = snippetAuthorChannelId,
+                                UserName = x.AuthorDetails.DisplayName,
+                                Mine = ChannelId == snippetAuthorChannelId
+                            };
                         }).ToList()
                     });
                 }
@@ -96,9 +109,32 @@ public class YoutubeProvider : IStreamingPlatformProvider
         _longPollThread.Start();
     }
 
+    public async Task SendMessageAsync(string messageText)
+    {
+        if (string.IsNullOrWhiteSpace(messageText))
+        {
+            return;
+        }
+
+        var req = _youtubeServices.LiveChatMessagesResource.Insert(new LiveChatMessage()
+        {
+            Snippet = new LiveChatMessageSnippet()
+            {
+                Type = "textMessageEvent",
+                LiveChatId = StreamId,
+                TextMessageDetails = new LiveChatTextMessageDetails()
+                {
+                    MessageText = messageText
+                }
+            }
+        }, new Repeatable<string>(new[] { "snippet" }));
+
+        await req.ExecuteAsync();
+    }
+
     public void Dispose()
     {
-        _youTubeService.Dispose();
+        _youtubeServices.Dispose();
         _longPollThread.Interrupt();
     }
 }
