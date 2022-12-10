@@ -12,10 +12,12 @@ internal class YoutubeServices : IDisposable
 
         LiveBroadcastsResource = new LiveBroadcastsResource(_youTubeService);
         LiveChatMessagesResource = new LiveChatMessagesResource(_youTubeService);
+        VideosResource = new VideosResource(_youTubeService);
     }
 
     public LiveBroadcastsResource LiveBroadcastsResource { get; }
     public LiveChatMessagesResource LiveChatMessagesResource { get; }
+    public VideosResource VideosResource { get; }
 
     public void Dispose()
     {

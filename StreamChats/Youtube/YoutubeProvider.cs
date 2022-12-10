@@ -21,6 +21,8 @@ public class YoutubeProvider : IStreamingPlatformProvider
     private string StreamId => _streamData.Items[0].Snippet.LiveChatId;
     private string ChannelId => _streamData.Items[0].Snippet.ChannelId;
 
+    private string VideoId => _streamData.Items[0].Id;
+
     private YoutubeProvider(YoutubeServices youtubeServices, LiveBroadcastListResponse streamData)
     {
         _youtubeServices = youtubeServices;
@@ -131,6 +133,24 @@ public class YoutubeProvider : IStreamingPlatformProvider
         }, new Repeatable<string>(new[] { "snippet" }));
 
         await req.ExecuteAsync();
+    }
+
+    public async Task<StreamStatistic> GetStatisticAsync()
+    {
+        var req = _youtubeServices.VideosResource.List(new Repeatable<string>(new[]
+            { "statistics", "liveStreamingDetails" }));
+
+        req.Id = new Repeatable<string>(new[] { VideoId });
+
+        var videoData = await req.ExecuteAsync();
+
+        var videoDataItem = videoData.Items[0];
+        return new StreamStatistic()
+        {
+            ConcurrentViewersCount = videoDataItem.LiveStreamingDetails.ConcurrentViewers ?? 0,
+            LikesCount = videoDataItem.Statistics.LikeCount ?? 0,
+            ViewsCount = videoDataItem.Statistics.ViewCount ?? 0
+        };
     }
 
     public void Dispose()
