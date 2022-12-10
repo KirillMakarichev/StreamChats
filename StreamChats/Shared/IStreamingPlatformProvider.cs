@@ -1,6 +1,4 @@
-﻿using StreamChats.DonationAlerts;
-
-namespace StreamChats.Shared;
+﻿namespace StreamChats.Shared;
 
 public interface IStreamingPlatformProvider : IDisposable
 {

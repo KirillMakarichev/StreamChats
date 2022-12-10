@@ -1,6 +1,4 @@
-﻿using System.Diagnostics;
-
-namespace StreamChats.Shared;
+﻿namespace StreamChats.Shared;
 
 public class StreamingProvider : IDisposable
 {

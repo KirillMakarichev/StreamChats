@@ -1,8 +1,3 @@
 ﻿namespace StreamChats.Youtube;
 
-public class StreamStatistic
-{
-    public ulong LikesCount { get; set; }
-    public ulong ConcurrentViewersCount { get; set; }
-    public ulong ViewsCount { get; set; }
-}
+public record StreamStatistic(ulong LikesCount, ulong ViewsCount, ulong ConcurrentViewersCount);

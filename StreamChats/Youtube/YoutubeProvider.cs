@@ -1,6 +1,5 @@
 ﻿using System.Text;
 using Google.Apis.Auth.OAuth2;
-using Google.Apis.Http;
 using Google.Apis.Services;
 using Google.Apis.Util;
 using Google.Apis.Util.Store;
@@ -15,18 +14,19 @@ public class YoutubeProvider : IStreamingPlatformProvider
     public event Func<UpdateEvent, Task> OnUpdateAsync;
     public Platform Platform => Platform.Youtube;
     private Thread _longPollThread;
-    private readonly LiveBroadcastListResponse _streamData;
     private readonly YoutubeServices _youtubeServices;
-
-    private string StreamId => _streamData.Items[0].Snippet.LiveChatId;
-    private string ChannelId => _streamData.Items[0].Snippet.ChannelId;
-
-    private string VideoId => _streamData.Items[0].Id;
+    private readonly VideoData _videoData;
 
     private YoutubeProvider(YoutubeServices youtubeServices, LiveBroadcastListResponse streamData)
     {
         _youtubeServices = youtubeServices;
-        _streamData = streamData;
+
+        var streamDataItem = streamData.Items[0];
+        _videoData = new VideoData(
+            streamDataItem.Snippet.LiveChatId,
+            streamDataItem.Snippet.ChannelId,
+            streamDataItem.Id
+        );
     }
 
     public static async Task<YoutubeProvider> InitializeFromFileAsync(string fileCredentialsPath)
@@ -46,7 +46,7 @@ public class YoutubeProvider : IStreamingPlatformProvider
     private static async Task<YoutubeProvider> SetCredentialAsync(Stream stream)
     {
         var credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
-            GoogleClientSecrets.Load(stream).Secrets,
+            (await GoogleClientSecrets.FromStreamAsync(stream)).Secrets,
             new[] { YouTubeService.Scope.YoutubeReadonly, YouTubeService.Scope.YoutubeForceSsl },
             "user",
             CancellationToken.None,
@@ -73,7 +73,7 @@ public class YoutubeProvider : IStreamingPlatformProvider
 
     public async Task SubscribeForMessagesAsync()
     {
-        var query = _youtubeServices.LiveChatMessagesResource.List(StreamId,
+        var query = _youtubeServices.LiveChatMessagesResource.List(_videoData.StreamId,
             new Repeatable<string>(new[] { "snippet", "authorDetails" }));
 
         _longPollThread = new Thread(async () =>
@@ -93,14 +93,13 @@ public class YoutubeProvider : IStreamingPlatformProvider
                         {
                             var snippetAuthorChannelId = x.Snippet.AuthorChannelId;
 
-                            return new Message()
-                            {
-                                Text = x.Snippet.DisplayMessage,
-                                CreatedAt = DateTime.Parse(x.Snippet.PublishedAtRaw),
-                                UserId = snippetAuthorChannelId,
-                                UserName = x.AuthorDetails.DisplayName,
-                                Mine = ChannelId == snippetAuthorChannelId
-                            };
+                            return new Message(
+                                Text: x.Snippet.DisplayMessage,
+                                CreatedAt: DateTime.Parse(x.Snippet.PublishedAtRaw),
+                                UserId: snippetAuthorChannelId,
+                                UserName: x.AuthorDetails.DisplayName,
+                                Mine: _videoData.ChannelId == snippetAuthorChannelId
+                            );
                         }).ToList()
                     });
                 }
@@ -124,7 +123,7 @@ public class YoutubeProvider : IStreamingPlatformProvider
             Snippet = new LiveChatMessageSnippet()
             {
                 Type = "textMessageEvent",
-                LiveChatId = StreamId,
+                LiveChatId = _videoData.StreamId,
                 TextMessageDetails = new LiveChatTextMessageDetails()
                 {
                     MessageText = messageText
@@ -140,17 +139,16 @@ public class YoutubeProvider : IStreamingPlatformProvider
         var req = _youtubeServices.VideosResource.List(new Repeatable<string>(new[]
             { "statistics", "liveStreamingDetails" }));
 
-        req.Id = new Repeatable<string>(new[] { VideoId });
+        req.Id = new Repeatable<string>(new[] { _videoData.VideoId });
 
         var videoData = await req.ExecuteAsync();
 
         var videoDataItem = videoData.Items[0];
-        return new StreamStatistic()
-        {
-            ConcurrentViewersCount = videoDataItem.LiveStreamingDetails.ConcurrentViewers ?? 0,
-            LikesCount = videoDataItem.Statistics.LikeCount ?? 0,
-            ViewsCount = videoDataItem.Statistics.ViewCount ?? 0
-        };
+        return new StreamStatistic(
+            ConcurrentViewersCount: videoDataItem.LiveStreamingDetails.ConcurrentViewers ?? 0,
+            ViewsCount: videoDataItem.Statistics.ViewCount ?? 0,
+            LikesCount: videoDataItem.Statistics.LikeCount ?? 0
+        );
     }
 
     public void Dispose()

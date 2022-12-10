@@ -18,6 +18,7 @@ internal class UserInfoConverter : JsonConverter<UserInfo>
 
         var userInfo = new UserInfo();
         userInfo.ChannelId = jObject["channel"]["channel_id"].ToObject<long>();
+        userInfo.UserId = jObject["channel"]["user_id"].ToObject<long>();
 
         userInfo.IsActive = jObject["channel"]["channel_is_live"].ToObject<bool>();
 

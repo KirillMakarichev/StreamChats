@@ -5,4 +5,5 @@ internal class UserInfo
     public long StreamId { get; set; }
     public bool IsActive { get; set; }
     public long ChannelId { get; set; }
+    public long UserId { get; set; }
 }

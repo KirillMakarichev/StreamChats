@@ -1,6 +1,5 @@
 ﻿using H.Socket.IO;
 using Newtonsoft.Json;
-using Polly;
 using Polly.Contrib.WaitAndRetry;
 using StreamChats.Shared;
 
@@ -68,7 +67,7 @@ public class WasdProvider : IStreamingPlatformProvider
         await ConnectAsync();
 
         var user = await GetUserInfoAsync(_channelName);
-
+        
         if (!user.IsSuccessfulCode)
             return;
 
@@ -91,19 +90,20 @@ public class WasdProvider : IStreamingPlatformProvider
         _socketClient.On("message", s =>
         {
             var json = JsonConvert.DeserializeObject<Dictionary<string, object>>(s);
+            var userId = (long)json["user_id"];
             var messageEvent = new UpdateEvent()
             {
                 PlatformIdentity = Platform,
                 EventType = EventType.Message,
                 Messages = new List<Message>()
                 {
-                    new()
-                    {
-                        Text = (string)json["message"],
-                        CreatedAt = (DateTime)json["date_time"],
-                        UserId = ((long)json["user_id"]).ToString(),
-                        UserName = (string)json["user_login"]
-                    }
+                    new(
+                        Text: (string)json["message"],
+                        CreatedAt: (DateTime)json["date_time"],
+                        UserId: userId.ToString(),
+                        UserName: (string)json["user_login"],
+                        Mine: userId == user.Content.UserId
+                    )
                 }
             };
 
@@ -128,7 +128,7 @@ public class WasdProvider : IStreamingPlatformProvider
                 var peeked = backoffs.Dequeue();
                 await Task.Delay((int)peeked.TotalMilliseconds);
                 await ConnectAsync();
-                
+
                 var last = backoffs.Last();
                 backoffs.Enqueue(last);
             }
