@@ -15,15 +15,16 @@ public class YoutubeProvider : IStreamingPlatformProvider
     public event Func<UpdateEvent, Task> OnUpdateAsync;
     public Platform Platform => Platform.Youtube;
     private Thread _longPollThread;
-    private LiveBroadcastListResponse _streamData;
+    private readonly LiveBroadcastListResponse _streamData;
     private readonly YoutubeServices _youtubeServices;
 
     private string StreamId => _streamData.Items[0].Snippet.LiveChatId;
     private string ChannelId => _streamData.Items[0].Snippet.ChannelId;
 
-    private YoutubeProvider(YoutubeServices youtubeServices)
+    private YoutubeProvider(YoutubeServices youtubeServices, LiveBroadcastListResponse streamData)
     {
         _youtubeServices = youtubeServices;
+        _streamData = streamData;
     }
 
     public static async Task<YoutubeProvider> InitializeFromFileAsync(string fileCredentialsPath)
@@ -60,16 +61,16 @@ public class YoutubeProvider : IStreamingPlatformProvider
 
         var services = new YoutubeServices(youTubeService);
 
-        return new YoutubeProvider(services);
+        var req = services.LiveBroadcastsResource.List(new Repeatable<string>(new[] { "snippet" }));
+        req.Mine = true;
+
+        var streamData = await req.ExecuteAsync();
+
+        return new YoutubeProvider(services, streamData);
     }
 
     public async Task SubscribeForMessagesAsync()
     {
-        var req = _youtubeServices.LiveBroadcastsResource.List(new Repeatable<string>(new[] { "snippet" }));
-        req.Mine = true;
-
-        _streamData = await req.ExecuteAsync();
-
         var query = _youtubeServices.LiveChatMessagesResource.List(StreamId,
             new Repeatable<string>(new[] { "snippet", "authorDetails" }));
 
