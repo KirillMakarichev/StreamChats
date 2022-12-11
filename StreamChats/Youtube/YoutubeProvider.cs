@@ -95,7 +95,7 @@ public class YoutubeProvider : IStreamingPlatformProvider
 
                             return new Message(
                                 Text: x.Snippet.DisplayMessage,
-                                CreatedAt: DateTime.Parse(x.Snippet.PublishedAtRaw),
+                                CreatedAt: DateTime.Parse(x.Snippet.PublishedAtRaw).ToUniversalTime(),
                                 UserId: snippetAuthorChannelId,
                                 UserName: x.AuthorDetails.DisplayName,
                                 Mine: _videoData.ChannelId == snippetAuthorChannelId

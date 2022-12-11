@@ -9,9 +9,9 @@ public class WasdProvider : IStreamingPlatformProvider
 {
     public event Func<UpdateEvent, Task> OnUpdateAsync;
     public Platform Platform => Platform.Wasd;
-
     public string AccessToken => _accessToken;
 
+    
     private readonly string _accessToken;
     private readonly SocketIoClient _socketClient = new();
     private readonly HttpClient _apiClient;
@@ -99,7 +99,7 @@ public class WasdProvider : IStreamingPlatformProvider
                 {
                     new(
                         Text: (string)json["message"],
-                        CreatedAt: (DateTime)json["date_time"],
+                        CreatedAt: ((DateTime)json["date_time"]).ToUniversalTime(),
                         UserId: userId.ToString(),
                         UserName: (string)json["user_login"],
                         Mine: userId == user.Content.UserId

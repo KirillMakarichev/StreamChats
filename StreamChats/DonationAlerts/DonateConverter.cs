@@ -19,7 +19,7 @@ internal class DonateConverter : JsonConverter<Donate>
         var donate = new Donate(
             Id: (long)jObject["id"],
             UserName: (string)jObject["username"],
-            CreatedAt: (DateTime)jObject["created_at"],
+            CreatedAt: ((DateTime)jObject["created_at"]).ToUniversalTime(),
             Message: (string)jObject["message"],
             AmountInUserCurrency: (decimal)jObject["amount_in_user_currency"]
         );
