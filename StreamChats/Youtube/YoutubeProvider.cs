@@ -15,11 +15,14 @@ public class YoutubeProvider : IStreamingPlatformProvider
     public string Platform => "Youtube";
     private Thread _longPollThread;
     private readonly YoutubeServices _youtubeServices;
+    private readonly ulong _updateDelay;
     private readonly VideoData _videoData;
-
-    private YoutubeProvider(YoutubeServices youtubeServices, LiveBroadcastListResponse streamData)
+    private const ulong UpdateDelayDefault = 5000;
+    
+    private YoutubeProvider(YoutubeServices youtubeServices, LiveBroadcastListResponse streamData, ulong updateDelay)
     {
         _youtubeServices = youtubeServices;
+        _updateDelay = updateDelay == 0 ? UpdateDelayDefault : updateDelay;
 
         var streamDataItem = streamData.Items[0];
         _videoData = new VideoData(
@@ -29,21 +32,22 @@ public class YoutubeProvider : IStreamingPlatformProvider
         );
     }
 
-    public static async Task<YoutubeProvider> InitializeFromFileAsync(string fileCredentialsPath)
+    public static async Task<YoutubeProvider> InitializeFromFileAsync(string fileCredentialsPath,
+        ulong updateDelay = 5000)
     {
         await using var stream = new FileStream(fileCredentialsPath, FileMode.Open, FileAccess.Read);
 
-        return await SetCredentialAsync(stream);
+        return await SetCredentialAsync(stream, updateDelay);
     }
 
-    public static async Task<YoutubeProvider> InitializeFromJsonAsync(string credentialsJson)
+    public static async Task<YoutubeProvider> InitializeFromJsonAsync(string credentialsJson, ulong updateDelay = UpdateDelayDefault)
     {
         await using var stream = new MemoryStream(Encoding.Default.GetBytes(credentialsJson));
 
-        return await SetCredentialAsync(stream);
+        return await SetCredentialAsync(stream, updateDelay);
     }
 
-    private static async Task<YoutubeProvider> SetCredentialAsync(Stream stream)
+    private static async Task<YoutubeProvider> SetCredentialAsync(Stream stream, ulong updateDelay = UpdateDelayDefault)
     {
         var credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
             (await GoogleClientSecrets.FromStreamAsync(stream)).Secrets,
@@ -68,7 +72,7 @@ public class YoutubeProvider : IStreamingPlatformProvider
 
         var streamData = await req.ExecuteAsync();
 
-        return new YoutubeProvider(services, streamData);
+        return new YoutubeProvider(services, streamData, updateDelay);
     }
 
     public async Task SubscribeForMessagesAsync()
@@ -103,7 +107,7 @@ public class YoutubeProvider : IStreamingPlatformProvider
                     });
                 }
 
-                await Task.Delay(5000);
+                await Task.Delay((int)_updateDelay);
             }
         });
 
