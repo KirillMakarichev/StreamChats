@@ -6,16 +6,15 @@ namespace StreamChats.DonationAlerts;
 
 public class DonationAlertsProvider : IStreamingPlatformProvider
 {
-    public event Func<UpdateEvent, Task>? OnUpdateAsync;
-
-    public Platform Platform => Platform.DonationAlerts;
+    public event Func<UpdateEvent<IUpdate>, Task>? OnUpdateAsync;
+    public string Platform => "DonationAlerts";
 
     private readonly HttpClient _httpClient;
     private readonly WebSocketClient _webSocketClient;
     private Thread _longPollThread;
 
-    private readonly int _clientId = Random.Shared.Next(); 
-    
+    private readonly int _clientId = Random.Shared.Next();
+
     private DonationAlertsProvider(HttpClient httpClient, WebSocketClient webSocketClient)
     {
         _httpClient = httpClient;
@@ -70,14 +69,13 @@ public class DonationAlertsProvider : IStreamingPlatformProvider
             while (_webSocketClient.IsConnected)
             {
                 var message = await _webSocketClient.WaitTextAsync();
-                
+
                 var donate = JsonConvert.DeserializeObject<Donate>(message.Value, converters: new DonateConverter());
-                
-                OnUpdateAsync?.Invoke(new UpdateEvent()
+
+                OnUpdateAsync?.Invoke(new UpdateEvent<IUpdate>()
                 {
-                    Donate = donate,
-                    EventType = EventType.Donate,
-                    PlatformIdentity = Platform.DonationAlerts
+                    Body = donate,
+                    PlatformIdentity = Platform
                 });
             }
         });
@@ -149,7 +147,7 @@ public class DonationAlertsProvider : IStreamingPlatformProvider
             Content = connectionInfo
         };
     }
-
+    
     private async Task<ResponseWrapper<SocketClientInfo>> StepSecondAsync(ConnectionInfo connectionInfo)
     {
         await _webSocketClient.SendTextAsync(

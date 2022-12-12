@@ -7,11 +7,10 @@ namespace StreamChats.Wasd;
 
 public class WasdProvider : IStreamingPlatformProvider
 {
-    public event Func<UpdateEvent, Task> OnUpdateAsync;
-    public Platform Platform => Platform.Wasd;
+    public event Func<UpdateEvent<IUpdate>, Task>? OnUpdateAsync;
+    public string Platform => "Wasd";
     public string AccessToken => _accessToken;
 
-    
     private readonly string _accessToken;
     private readonly SocketIoClient _socketClient = new();
     private readonly HttpClient _apiClient;
@@ -67,7 +66,7 @@ public class WasdProvider : IStreamingPlatformProvider
         await ConnectAsync();
 
         var user = await GetUserInfoAsync(_channelName);
-        
+
         if (!user.IsSuccessfulCode)
             return;
 
@@ -91,20 +90,19 @@ public class WasdProvider : IStreamingPlatformProvider
         {
             var json = JsonConvert.DeserializeObject<Dictionary<string, object>>(s);
             var userId = (long)json["user_id"];
-            var messageEvent = new UpdateEvent()
+            var messageEvent = new UpdateEvent<IUpdate>()
             {
                 PlatformIdentity = Platform,
-                EventType = EventType.Message,
-                Messages = new List<Message>()
-                {
-                    new(
-                        Text: (string)json["message"],
-                        CreatedAt: ((DateTime)json["date_time"]).ToUniversalTime(),
-                        UserId: userId.ToString(),
-                        UserName: (string)json["user_login"],
-                        Mine: userId == user.Content.UserId
-                    )
-                }
+                Body = new MessagesArray(
+                    new List<Message>()
+                    {
+                        new(Text: (string)json["message"],
+                            CreatedAt: ((DateTime)json["date_time"]).ToUniversalTime(),
+                            UserId: userId.ToString(),
+                            UserName: (string)json["user_login"],
+                            Mine: userId == user.Content.UserId)
+                    }
+                )
             };
 
             OnUpdateAsync?.Invoke(messageEvent);

@@ -2,7 +2,7 @@
 
 public interface IStreamingPlatformProvider : IDisposable
 {
-    public event Func<UpdateEvent, Task> OnUpdateAsync;
-    public Platform Platform { get; }
+    public event Func<UpdateEvent<IUpdate>, Task>? OnUpdateAsync;
+    public string Platform { get; }
     public Task SubscribeForMessagesAsync();
 }

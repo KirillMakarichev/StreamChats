@@ -11,38 +11,48 @@ var wasd = await WasdProvider.InitializeAsync(channelName: "xpamyjl9");
 var token = (string)clientSecrets["donationAlerts"]["token"];
 using var da = await DonationAlertsProvider.InitializeAsync(token);
 
-var youtubeOptions = clientSecrets["youtube"].ToString();
+ var youtubeOptions = clientSecrets["youtube"].ToString();
 
-using var youtube =
-    await YoutubeProvider.InitializeFromJsonAsync(youtubeOptions);
+ using var youtube =
+     await YoutubeProvider.InitializeFromJsonAsync(youtubeOptions);
 
 using var streamingProvider = new StreamingProvider(
     new List<IStreamingPlatformProvider>()
     {
         da,
         youtube,
-        wasd
+        wasd,
     });
 
 await streamingProvider.SubscribeForMessagesAsync(async @event =>
 {
     Console.WriteLine(@event.PlatformIdentity);
-    switch (@event.EventType)
+    switch (@event.Body.EventType)
     {
-        case EventType.Message:
-            foreach (var message in @event.Messages)
+        case "Messages":
+            if (@event.Body is not MessagesArray messages)
+            {
+                return;
+            }
+
+            foreach (var message in messages.Messages)
             {
                 Console.WriteLine($"{message.UserName}: {message.Text}");
             }
 
             break;
-        case EventType.Donate:
 
-            Console.WriteLine($"{@event.Donate.UserName}: {@event.Donate.AmountInUserCurrency}");
+        case "Donate":
+            if (@event.Body is not Donate donate)
+            {
+                return;
+            }
 
+            Console.WriteLine($"{donate.UserName}: {donate.AmountInUserCurrency}");
             break;
+        
         default:
-            throw new ArgumentOutOfRangeException();
+            return;
     }
 
     Console.WriteLine();

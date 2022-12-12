@@ -1,11 +1,8 @@
 ﻿namespace StreamChats.Shared;
 
-public class UpdateEvent
+public class UpdateEvent<T> 
+where T: IUpdate
 {
-    public List<Message> Messages { get; set; }
-    
-    public Donate Donate { get; set; }
-    
-    public EventType EventType { get; set; }
-    public Platform PlatformIdentity { get; set; }
+    public T Body { get; set; }
+    public string PlatformIdentity { get; set; }
 }

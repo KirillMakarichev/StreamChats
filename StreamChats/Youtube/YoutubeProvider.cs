@@ -11,8 +11,8 @@ namespace StreamChats.Youtube;
 
 public class YoutubeProvider : IStreamingPlatformProvider
 {
-    public event Func<UpdateEvent, Task> OnUpdateAsync;
-    public Platform Platform => Platform.Youtube;
+    public event Func<UpdateEvent<IUpdate>, Task>? OnUpdateAsync;
+    public string Platform => "Youtube";
     private Thread _longPollThread;
     private readonly YoutubeServices _youtubeServices;
     private readonly VideoData _videoData;
@@ -85,11 +85,10 @@ public class YoutubeProvider : IStreamingPlatformProvider
 
                 if (resp.Items.Any())
                 {
-                    OnUpdateAsync?.Invoke(new UpdateEvent()
+                    OnUpdateAsync?.Invoke(new UpdateEvent<IUpdate>()
                     {
-                        EventType = EventType.Message,
                         PlatformIdentity = Platform,
-                        Messages = resp.Items.Select(x =>
+                        Body = new MessagesArray(resp.Items.Select(x =>
                         {
                             var snippetAuthorChannelId = x.Snippet.AuthorChannelId;
 
@@ -100,7 +99,7 @@ public class YoutubeProvider : IStreamingPlatformProvider
                                 UserName: x.AuthorDetails.DisplayName,
                                 Mine: _videoData.ChannelId == snippetAuthorChannelId
                             );
-                        }).ToList()
+                        }).ToList())
                     });
                 }
 
