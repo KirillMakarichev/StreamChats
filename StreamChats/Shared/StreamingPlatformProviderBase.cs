@@ -21,7 +21,7 @@ public abstract class StreamingPlatformProviderBase : IStreamingPlatformProvider
     protected abstract Task SubscribeForUpdatesAsync();
 
     protected void OnError(Exception exception, bool dispose = true) => OnError(exception.Message, dispose: dispose);
-    
+
     protected void OnError(string exception, bool dispose = true)
     {
         OnErrorAsync?.Invoke(new StreamingException()
@@ -31,7 +31,10 @@ public abstract class StreamingPlatformProviderBase : IStreamingPlatformProvider
             PlatformProvider = this
         });
 
-        Dispose();
+        if (dispose)
+        {
+            Dispose();
+        }
     }
 
     protected void OnUpdate(IUpdate update)
