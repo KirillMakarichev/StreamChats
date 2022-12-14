@@ -5,10 +5,9 @@ using StreamChats.Shared;
 
 namespace StreamChats.Wasd;
 
-public class WasdProvider : IStreamingPlatformProvider
+public class WasdProvider : StreamingPlatformProviderBase
 {
-    public event Func<UpdateEvent<IUpdate>, Task>? OnUpdateAsync;
-    public string Platform => "Wasd";
+    public override string Platform => "Wasd";
     public string AccessToken => _accessToken;
 
     private readonly string _accessToken;
@@ -54,7 +53,7 @@ public class WasdProvider : IStreamingPlatformProvider
         return !gotToken ? null : new WasdProvider(apiClient, channelName, token);
     }
 
-    public async Task SubscribeForMessagesAsync()
+    protected override async Task SubscribeForUpdatesAsync()
     {
         if (_isUsed)
         {
@@ -64,7 +63,6 @@ public class WasdProvider : IStreamingPlatformProvider
         _isUsed = true;
 
         await ConnectAsync();
-
         var user = await GetUserInfoAsync(_channelName);
 
         if (!user.IsSuccessfulCode)
@@ -80,32 +78,25 @@ public class WasdProvider : IStreamingPlatformProvider
 
         await _socketClient.Emit("join", joinRequest);
 
-        _socketClient.On("joined", s => Console.WriteLine(s));
+        _socketClient.Disconnected += (_, args) => OnError($"{args.Status}");
 
-        _socketClient.Disconnected += (_, args) => Console.WriteLine($"Disconnected: {args.Reason}");
+        _socketClient.ErrorReceived += (_, args) => OnError(args.Value);
 
-        _socketClient.ErrorReceived += (_, args) => Console.WriteLine(args.Value);
-
-        _socketClient.On("message", s =>
+        _socketClient.On("message", async s =>
         {
             var json = JsonConvert.DeserializeObject<Dictionary<string, object>>(s);
             var userId = (long)json["user_id"];
-            var messageEvent = new UpdateEvent<IUpdate>()
-            {
-                PlatformIdentity = Platform,
-                Body = new MessagesArray(
-                    new List<Message>()
-                    {
-                        new(Text: (string)json["message"],
-                            CreatedAt: ((DateTime)json["date_time"]).ToUniversalTime(),
-                            UserId: userId.ToString(),
-                            UserName: (string)json["user_login"],
-                            Mine: userId == user.Content.UserId)
-                    }
-                )
-            };
 
-            OnUpdateAsync?.Invoke(messageEvent);
+            OnUpdate(new MessagesArray(
+                new List<Message>()
+                {
+                    new(Text: (string)json["message"],
+                        CreatedAt: ((DateTime)json["date_time"]).ToUniversalTime(),
+                        UserId: userId.ToString(),
+                        UserName: (string)json["user_login"],
+                        Mine: userId == user.Content.UserId)
+                }
+            ));
         });
 
         _longPollHeartbeat = new Thread(async () =>
@@ -163,11 +154,11 @@ public class WasdProvider : IStreamingPlatformProvider
         };
     }
 
-    public void Dispose()
+    public override void Dispose()
     {
-        _apiClient.Dispose();
-        _socketClient.Dispose();
-        _longPollHeartbeat.Interrupt();
-        _longPollExponentialBackoff.Interrupt();
+        _apiClient?.Dispose();
+        _socketClient?.Dispose();
+        _longPollHeartbeat?.Interrupt();
+        _longPollExponentialBackoff?.Interrupt();
     }
 }

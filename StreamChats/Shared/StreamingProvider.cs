@@ -3,7 +3,7 @@
 public class StreamingProvider : IDisposable
 {
     private readonly List<IStreamingPlatformProvider> _providers;
-    
+
     public StreamingProvider(List<IStreamingPlatformProvider> providers)
     {
         if (providers == null && !providers.Any())
@@ -14,13 +14,21 @@ public class StreamingProvider : IDisposable
         _providers = providers.Where(x => x != null).ToList();
     }
 
+    public void SubscribeForException(Func<StreamingException, Task> handler)
+    {
+        foreach (var provider in _providers)
+        {
+            provider.OnErrorAsync += handler;
+        }
+    }
+
     public async Task SubscribeForMessagesAsync(Func<UpdateEvent<IUpdate>, Task> handler)
     {
         var tasks = new List<Task>();
         foreach (var provider in _providers)
         {
             provider.OnUpdateAsync += handler;
-            
+
             tasks.Add(provider.SubscribeForMessagesAsync());
         }
 

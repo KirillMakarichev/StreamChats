@@ -9,16 +9,15 @@ using StreamChats.Shared;
 
 namespace StreamChats.Youtube;
 
-public class YoutubeProvider : IStreamingPlatformProvider
+public class YoutubeProvider : StreamingPlatformProviderBase
 {
-    public event Func<UpdateEvent<IUpdate>, Task>? OnUpdateAsync;
-    public string Platform => "Youtube";
+    public override string Platform => "Youtube";
     private Thread _longPollThread;
     private readonly YoutubeServices _youtubeServices;
     private readonly ulong _updateDelay;
     private readonly VideoData _videoData;
     private const ulong UpdateDelayDefault = 5000;
-    
+
     private YoutubeProvider(YoutubeServices youtubeServices, LiveBroadcastListResponse streamData, ulong updateDelay)
     {
         _youtubeServices = youtubeServices;
@@ -33,14 +32,15 @@ public class YoutubeProvider : IStreamingPlatformProvider
     }
 
     public static async Task<YoutubeProvider> InitializeFromFileAsync(string fileCredentialsPath,
-        ulong updateDelay = 5000)
+        ulong updateDelay = UpdateDelayDefault)
     {
         await using var stream = new FileStream(fileCredentialsPath, FileMode.Open, FileAccess.Read);
 
         return await SetCredentialAsync(stream, updateDelay);
     }
 
-    public static async Task<YoutubeProvider> InitializeFromJsonAsync(string credentialsJson, ulong updateDelay = UpdateDelayDefault)
+    public static async Task<YoutubeProvider> InitializeFromJsonAsync(string credentialsJson,
+        ulong updateDelay = UpdateDelayDefault)
     {
         await using var stream = new MemoryStream(Encoding.Default.GetBytes(credentialsJson));
 
@@ -70,12 +70,21 @@ public class YoutubeProvider : IStreamingPlatformProvider
         var req = services.LiveBroadcastsResource.List(new Repeatable<string>(new[] { "snippet" }));
         req.Mine = true;
 
-        var streamData = await req.ExecuteAsync();
+        LiveBroadcastListResponse? streamData = null;
+
+        try
+        {
+            streamData = await req.ExecuteAsync();
+        }
+        catch (Exception e)
+        {
+            return null;
+        }
 
         return new YoutubeProvider(services, streamData, updateDelay);
     }
 
-    public async Task SubscribeForMessagesAsync()
+    protected override async Task SubscribeForUpdatesAsync()
     {
         var query = _youtubeServices.LiveChatMessagesResource.List(_videoData.StreamId,
             new Repeatable<string>(new[] { "snippet", "authorDetails" }));
@@ -84,27 +93,33 @@ public class YoutubeProvider : IStreamingPlatformProvider
         {
             while (true)
             {
-                var resp = await query.ExecuteAsync();
+                LiveChatMessageListResponse? resp = null;
+                try
+                {
+                    resp = await query.ExecuteAsync();
+                }
+                catch (Exception e)
+                {
+                    OnError(e);
+                    return;
+                }
+
                 query.PageToken = resp.NextPageToken;
 
                 if (resp.Items.Any())
                 {
-                    OnUpdateAsync?.Invoke(new UpdateEvent<IUpdate>()
+                    OnUpdate(new MessagesArray(resp.Items.Select(x =>
                     {
-                        PlatformIdentity = Platform,
-                        Body = new MessagesArray(resp.Items.Select(x =>
-                        {
-                            var snippetAuthorChannelId = x.Snippet.AuthorChannelId;
+                        var snippetAuthorChannelId = x.Snippet.AuthorChannelId;
 
-                            return new Message(
-                                Text: x.Snippet.DisplayMessage,
-                                CreatedAt: DateTime.Parse(x.Snippet.PublishedAtRaw).ToUniversalTime(),
-                                UserId: snippetAuthorChannelId,
-                                UserName: x.AuthorDetails.DisplayName,
-                                Mine: _videoData.ChannelId == snippetAuthorChannelId
-                            );
-                        }).ToList())
-                    });
+                        return new Message(
+                            Text: x.Snippet.DisplayMessage,
+                            CreatedAt: DateTime.Parse(x.Snippet.PublishedAtRaw).ToUniversalTime(),
+                            UserId: snippetAuthorChannelId,
+                            UserName: x.AuthorDetails.DisplayName,
+                            Mine: _videoData.ChannelId == snippetAuthorChannelId
+                        );
+                    }).ToList()));
                 }
 
                 await Task.Delay((int)_updateDelay);
@@ -133,8 +148,15 @@ public class YoutubeProvider : IStreamingPlatformProvider
                 }
             }
         }, new Repeatable<string>(new[] { "snippet" }));
-
-        await req.ExecuteAsync();
+        
+        try
+        {
+            await req.ExecuteAsync();
+        }
+        catch (Exception e)
+        {
+            OnError(e, false);
+        }
     }
 
     public async Task<StreamStatistic> GetStatisticAsync()
@@ -144,7 +166,17 @@ public class YoutubeProvider : IStreamingPlatformProvider
 
         req.Id = new Repeatable<string>(new[] { _videoData.VideoId });
 
-        var videoData = await req.ExecuteAsync();
+        VideoListResponse? videoData;
+        
+        try
+        {
+            videoData = await req.ExecuteAsync();
+        }
+        catch (Exception e)
+        {
+            OnError(e, false);
+            return null;
+        }
 
         var videoDataItem = videoData.Items[0];
         return new StreamStatistic(
@@ -154,9 +186,9 @@ public class YoutubeProvider : IStreamingPlatformProvider
         );
     }
 
-    public void Dispose()
+    public override void Dispose()
     {
-        _youtubeServices.Dispose();
-        _longPollThread.Interrupt();
+        _youtubeServices?.Dispose();
+        _longPollThread?.Interrupt();
     }
 }

@@ -1,13 +1,13 @@
 ﻿using H.WebSockets;
+using H.WebSockets.Utilities;
 using Newtonsoft.Json;
 using StreamChats.Shared;
 
 namespace StreamChats.DonationAlerts;
 
-public class DonationAlertsProvider : IStreamingPlatformProvider
+public class DonationAlertsProvider : StreamingPlatformProviderBase
 {
-    public event Func<UpdateEvent<IUpdate>, Task>? OnUpdateAsync;
-    public string Platform => "DonationAlerts";
+    public override string Platform => "DonationAlerts";
 
     private readonly HttpClient _httpClient;
     private readonly WebSocketClient _webSocketClient;
@@ -37,7 +37,7 @@ public class DonationAlertsProvider : IStreamingPlatformProvider
         return new DonationAlertsProvider(httpClient, webSocketClient);
     }
 
-    public async Task SubscribeForMessagesAsync()
+    protected override async Task SubscribeForUpdatesAsync()
     {
         var connectionInfo = await StepFirstAsync();
 
@@ -68,15 +68,21 @@ public class DonationAlertsProvider : IStreamingPlatformProvider
         {
             while (_webSocketClient.IsConnected)
             {
-                var message = await _webSocketClient.WaitTextAsync();
+                DataEventArgs<string> message = null;
+
+                try
+                {
+                    message = await _webSocketClient.WaitTextAsync();
+                }
+                catch (Exception e)
+                {
+                    OnError(e);
+                    return;
+                }
 
                 var donate = JsonConvert.DeserializeObject<Donate>(message.Value, converters: new DonateConverter());
 
-                OnUpdateAsync?.Invoke(new UpdateEvent<IUpdate>()
-                {
-                    Body = donate,
-                    PlatformIdentity = Platform
-                });
+                OnUpdate(donate);
             }
         });
 
@@ -147,7 +153,7 @@ public class DonationAlertsProvider : IStreamingPlatformProvider
             Content = connectionInfo
         };
     }
-    
+
     private async Task<ResponseWrapper<SocketClientInfo>> StepSecondAsync(ConnectionInfo connectionInfo)
     {
         await _webSocketClient.SendTextAsync(
@@ -165,10 +171,10 @@ public class DonationAlertsProvider : IStreamingPlatformProvider
         };
     }
 
-    public void Dispose()
+    public override void Dispose()
     {
-        _httpClient.Dispose();
-        _webSocketClient.Dispose();
-        _longPollThread.Interrupt();
+        _httpClient?.Dispose();
+        _webSocketClient?.Dispose();
+        _longPollThread?.Interrupt();
     }
 }
